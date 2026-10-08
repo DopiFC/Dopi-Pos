@@ -1,0 +1,134 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return true;
+    }
+
+    function isOwner(userId) {
+      return request.auth == null || request.auth.uid == userId;
+    }
+
+    function isStoreOwner(storeId) {
+      return request.auth == null || request.auth.uid == storeId;
+    }
+
+    function isAdmin() {
+      return request.auth == null ||
+        request.auth.token.email == 'nhgb2605@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow get, list: if true;
+      allow create, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // Admins Collection
+    match /admins/{adminId} {
+      allow read, write: if true;
+    }
+
+    // Stores Collection
+    match /stores/{storeId} {
+      allow get, list: if true;
+      allow create, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // Products Collection
+    match /products/{productId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Categories Collection
+    match /categories/{categoryId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Orders Collection
+    match /orders/{orderId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Invoices Collection (Crucial for POS checkouts & sales receipts!)
+    match /invoices/{invoiceId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Customers Collection
+    match /customers/{customerId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Inventory Transactions Collection
+    match /inventoryTransactions/{transId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Subscriptions Collection
+    match /subscriptions/{subId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Activation Codes Collection
+    match /activationCodes/{codeId} {
+      allow read, write: if true;
+    }
+
+    // Tables Collection (F&B)
+    match /tables/{tableId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Table Areas Collection (F&B)
+    match /tableAreas/{areaId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Raw Ingredients Collection (Định lượng NVL & Giá vốn)
+    match /ingredients/{ingredientId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Operating Expenses Collection (Báo cáo Lãi Lỗ P&L)
+    match /expenses/{expenseId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // System Settings Collection
+    match /systemSettings/{settingId} {
+      allow read, write: if true;
+    }
+
+    // Audit Logs Collection
+    match /auditLogs/{logId} {
+      allow read, create: if true;
+      allow update, delete: if false;
+    }
+  }
+}

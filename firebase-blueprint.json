@@ -1,0 +1,265 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role and store linkage",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 128 },
+        "displayName": { "type": "string", "maxLength": 128 },
+        "phoneNumber": { "type": "string", "maxLength": 30 },
+        "storeName": { "type": "string", "maxLength": 128 },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Store": {
+      "title": "Store",
+      "description": "Store configuration and business info",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "address": { "type": "string", "maxLength": 255 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "ownerId", "name"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Product catalog item with pricing and stock",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "storeId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 150 },
+        "sku": { "type": "string", "maxLength": 64 },
+        "categoryId": { "type": "string", "maxLength": 128 },
+        "categoryName": { "type": "string", "maxLength": 100 },
+        "unit": { "type": "string", "maxLength": 30 },
+        "costPrice": { "type": "number" },
+        "sellingPrice": { "type": "number" },
+        "stock": { "type": "number" },
+        "minStockAlert": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "imageUrl": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "storeId", "name", "sellingPrice"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product categories",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "storeId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "sortOrder": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "storeId", "name"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Completed or cancelled POS sales order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "storeId": { "type": "string", "maxLength": 128 },
+        "orderNumber": { "type": "string", "maxLength": 64 },
+        "subtotal": { "type": "number" },
+        "discount": { "type": "number" },
+        "surcharge": { "type": "number" },
+        "total": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["cash", "transfer", "split"] },
+        "cashAmount": { "type": "number" },
+        "transferAmount": { "type": "number" },
+        "amountReceived": { "type": "number" },
+        "changeGiven": { "type": "number" },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 128 },
+        "tableId": { "type": "string", "maxLength": 128 },
+        "tableName": { "type": "string", "maxLength": 128 },
+        "orderType": { "type": "string", "enum": ["dine_in", "takeaway", "delivery"] },
+        "status": { "type": "string", "enum": ["completed", "cancelled"] },
+        "notes": { "type": "string", "maxLength": 500 },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "storeId", "orderNumber", "total", "paymentMethod", "status"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Customer contact record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "storeId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "address": { "type": "string", "maxLength": 255 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "totalOrders": { "type": "number" },
+        "totalSpent": { "type": "number" },
+        "lastOrderAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "storeId", "name", "phone"]
+    },
+    "InventoryTransaction": {
+      "title": "InventoryTransaction",
+      "description": "Inventory movement audit log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "storeId": { "type": "string", "maxLength": 128 },
+        "productId": { "type": "string", "maxLength": 128 },
+        "productName": { "type": "string", "maxLength": 150 },
+        "type": { "type": "string", "enum": ["import", "export", "sale", "adjustment", "cancel_order"] },
+        "quantityChange": { "type": "number" },
+        "previousStock": { "type": "number" },
+        "newStock": { "type": "number" },
+        "note": { "type": "string", "maxLength": 255 },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "storeId", "productId", "type", "quantityChange"]
+    },
+    "Subscription": {
+      "title": "Subscription",
+      "description": "Active subscription of store",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "storeId": { "type": "string", "maxLength": 128 },
+        "planId": { "type": "string", "enum": ["month_1", "month_3"] },
+        "planName": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["active", "expired"] },
+        "startDate": { "type": "string", "format": "date-time" },
+        "endDate": { "type": "string", "format": "date-time" },
+        "activatedViaCode": { "type": "string", "maxLength": 30 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "planId", "status", "startDate", "endDate"]
+    },
+    "ActivationCode": {
+      "title": "ActivationCode",
+      "description": "One-time 15-character activation codes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 30 },
+        "code": { "type": "string", "pattern": "^[A-Z0-9]{15}$" },
+        "planId": { "type": "string", "enum": ["month_1", "month_3"] },
+        "planDays": { "type": "number" },
+        "planPrice": { "type": "number" },
+        "redeemed": { "type": "boolean" },
+        "redeemedBy": { "type": "string", "maxLength": 128 },
+        "redeemedAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["active", "disabled"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "code", "planId", "planDays", "redeemed"]
+    },
+    "Table": {
+      "title": "Table",
+      "description": "F&B Table configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "storeId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "areaId": { "type": "string", "maxLength": 128 },
+        "areaName": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["available", "occupied", "bill_printed"] },
+        "currentOrderId": { "type": "string", "maxLength": 128 },
+        "capacity": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "storeId", "name", "status"]
+    },
+    "TableArea": {
+      "title": "TableArea",
+      "description": "F&B Table Area",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "storeId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "sortOrder": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "storeId", "name"]
+    },
+    "SystemSetting": {
+      "title": "SystemSetting",
+      "description": "Global application contact and plans settings",
+      "type": "object",
+      "properties": {
+        "appName": { "type": "string", "maxLength": 100 },
+        "contactZalo": { "type": "string", "maxLength": 100 },
+        "contactFacebook": { "type": "string", "maxLength": 255 },
+        "contactMessenger": { "type": "string", "maxLength": 255 },
+        "contactPhone": { "type": "string", "maxLength": 50 },
+        "contactEmail": { "type": "string", "maxLength": 100 }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile with role"
+    },
+    "/stores/{storeId}": {
+      "schema": { "$ref": "#/entities/Store" },
+      "description": "Store profile"
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Store products"
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Product categories"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Store orders"
+    },
+    "/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/Customer" },
+      "description": "Store customers"
+    },
+    "/inventoryTransactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/InventoryTransaction" },
+      "description": "Stock change logs"
+    },
+    "/subscriptions/{subscriptionId}": {
+      "schema": { "$ref": "#/entities/Subscription" },
+      "description": "User or Store subscriptions"
+    },
+    "/activationCodes/{codeId}": {
+      "schema": { "$ref": "#/entities/ActivationCode" },
+      "description": "Activation codes managed by backend/admin"
+    },
+    "/tables/{tableId}": {
+      "schema": { "$ref": "#/entities/Table" },
+      "description": "F&B dining tables"
+    },
+    "/tableAreas/{areaId}": {
+      "schema": { "$ref": "#/entities/TableArea" },
+      "description": "F&B dining areas"
+    },
+    "/systemSettings/{settingId}": {
+      "schema": { "$ref": "#/entities/SystemSetting" },
+      "description": "Global settings editable by admin"
+    }
+  }
+}

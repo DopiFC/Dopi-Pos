@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@layer utilities {
+  /* Hide scrollbars for clean horizontal categories list */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Thermal printer & Print styles */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .printable-receipt, .printable-receipt * {
+    visibility: visible;
+  }
+  .printable-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 80mm !important;
+    margin: 0 auto;
+    padding: 8px !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+}

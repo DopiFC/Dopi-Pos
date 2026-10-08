@@ -1,0 +1,6 @@
+{
+  "name": "DopiPOS",
+  "description": "Phần mềm quản lý bán hàng chuyên nghiệp cho hộ kinh doanh, bán lẻ và F&B",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
