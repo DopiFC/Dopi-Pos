@@ -165,6 +165,16 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+
+    // Check if email already registered
+    const existingSnap = await getDocs(query(collection(db, 'users'), where('email', '==', normalizedEmail), limit(1)));
+    if (!existingSnap.empty) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email này đã được sử dụng. Vui lòng đăng nhập hoặc dùng email khác.'
+      });
+    }
+
     const isAutoAdmin = normalizedEmail === DEFAULT_ADMIN_EMAIL;
     const uid = isAutoAdmin ? DEFAULT_ADMIN_UID : `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const nowIso = new Date().toISOString();
