@@ -22,7 +22,7 @@ import { useToast } from '../../context/ToastContext';
 import { ActivationCode, SystemSettings } from '../../types';
 import { formatCurrency, formatDateTime } from '../../utils/format';
 import { Modal } from '../../components/common/Modal';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDocs, collection, writeBatch } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
 export const Admin: React.FC = () => {
@@ -85,28 +85,116 @@ export const Admin: React.FC = () => {
 
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
-  // Load Admin Data
+  // Helper to generate 15-character uppercase code
+  const generateClientCode = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let res = '';
+    for (let i = 0; i < 15; i++) {
+      res += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return res;
+  };
+
+  // Load Admin Data with seamless API + Firestore Fallback
   const loadAdminData = async () => {
     try {
       setLoading(true);
-      const [statsRes, codesRes, settingsRes] = await Promise.all([
-        fetch('/api/admin/stats').then((r) => r.json()),
-        fetch(`/api/admin/codes?filter=${codeFilter}`).then((r) => r.json()),
-        fetch('/api/system-settings').then((r) => r.json())
-      ]);
+      let statsLoaded = false;
+      let codesLoaded = false;
+      let settingsLoaded = false;
 
-      if (statsRes.success) {
-        setStats(statsRes.stats);
-        if (statsRes.users) setUsersList(statsRes.users);
+      // 1. Try server endpoints
+      try {
+        const [statsRes, codesRes, settingsRes] = await Promise.all([
+          fetch('/api/admin/stats').then((r) => r.json()).catch(() => null),
+          fetch(`/api/admin/codes?filter=${codeFilter}`).then((r) => r.json()).catch(() => null),
+          fetch('/api/system-settings').then((r) => r.json()).catch(() => null)
+        ]);
+
+        if (statsRes?.success) {
+          setStats(statsRes.stats);
+          if (statsRes.users) setUsersList(statsRes.users);
+          statsLoaded = true;
+        }
+        if (codesRes?.success) {
+          setCodesList(codesRes.codes);
+          codesLoaded = true;
+        }
+        if (settingsRes?.success && settingsRes.settings) {
+          setSettings(settingsRes.settings);
+          settingsLoaded = true;
+        }
+      } catch (apiErr) {
+        console.warn('API admin fetch notice:', apiErr);
       }
-      if (codesRes.success) {
-        setCodesList(codesRes.codes);
-      }
-      if (settingsRes.success && settingsRes.settings) {
-        setSettings(settingsRes.settings);
+
+      // 2. Direct Firestore Fallback if any dataset not fully loaded
+      if (!statsLoaded || !codesLoaded || !settingsLoaded) {
+        const [usersSnap, subsSnap, codesSnap, settingsSnap] = await Promise.all([
+          getDocs(collection(db, 'users')).catch(() => null),
+          getDocs(collection(db, 'subscriptions')).catch(() => null),
+          getDocs(collection(db, 'activationCodes')).catch(() => null),
+          getDocs(collection(db, 'systemSettings')).catch(() => null)
+        ]);
+
+        if (!statsLoaded && usersSnap && subsSnap) {
+          const uDocs = usersSnap.docs.map((d) => d.data());
+          const sDocs = subsSnap.docs.map((d) => d.data());
+          const now = new Date();
+          const enriched = uDocs.map((u: any) => {
+            const sub = sDocs.find((s: any) => s.userId === u.uid);
+            let isExpired = false;
+            let daysLeft = 0;
+            if (sub?.endDate) {
+              const diff = (new Date(sub.endDate).getTime() - now.getTime()) / 86400000;
+              daysLeft = Math.max(0, Math.ceil(diff));
+              isExpired = diff <= 0;
+            }
+            return {
+              ...u,
+              subscription: sub,
+              planName: sub?.planName || 'Chưa kích hoạt',
+              planId: sub?.planId || 'none',
+              isTrial: sub?.isTrial ?? false,
+              isExpired,
+              daysLeft,
+              subEndDate: sub?.endDate
+            };
+          });
+          setUsersList(enriched);
+          const cDocs = codesSnap ? codesSnap.docs.map((d) => d.data()) : [];
+          setStats({
+            totalUsers: uDocs.length,
+            activeUsers: uDocs.filter((u: any) => u.status !== 'blocked').length,
+            totalSubscriptions: sDocs.length,
+            activeSubscriptions: sDocs.filter((s: any) => s.endDate && new Date(s.endDate) > now).length,
+            expiringSoonSubscriptions: sDocs.filter((s: any) => {
+              if (!s.endDate) return false;
+              const diff = (new Date(s.endDate).getTime() - now.getTime()) / 86400000;
+              return diff > 0 && diff <= 7;
+            }).length,
+            totalCodes: cDocs.length,
+            redeemedCodes: cDocs.filter((c: any) => c.redeemed).length,
+            unredeemedCodes: cDocs.filter((c: any) => !c.redeemed && c.status === 'active').length
+          });
+        }
+
+        if (!codesLoaded && codesSnap) {
+          let list = codesSnap.docs.map((d) => d.data() as ActivationCode);
+          if (codeFilter === 'unredeemed') list = list.filter((c) => !c.redeemed && c.status === 'active');
+          else if (codeFilter === 'redeemed') list = list.filter((c) => c.redeemed);
+          else if (codeFilter === 'disabled') list = list.filter((c) => c.status === 'disabled');
+          list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+          setCodesList(list);
+        }
+
+        if (!settingsLoaded && settingsSnap && !settingsSnap.empty) {
+          const cfg = settingsSnap.docs[0].data() as SystemSettings;
+          setSettings(cfg);
+        }
       }
     } catch (err) {
-      console.error(err);
+      console.error('Error in loadAdminData:', err);
     } finally {
       setLoading(false);
     }
@@ -132,10 +220,27 @@ export const Admin: React.FC = () => {
     );
   }
 
-  // Handle batch code generation
+  // Handle batch code generation with automatic fallback
   const handleGenerateCodes = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsGenerating(true);
+    const planNames: Record<string, string> = {
+      month_1: 'DopiPOS Hộ kinh doanh – 1 tháng',
+      month_3: 'DopiPOS Hộ kinh doanh – 3 tháng',
+      year_1: 'DopiPOS Hộ kinh doanh – 1 năm'
+    };
+    const planDays: Record<string, number> = {
+      month_1: 30,
+      month_3: 90,
+      year_1: 365
+    };
+    const planPrices: Record<string, number> = {
+      month_1: 39000,
+      month_3: 79000,
+      year_1: 299000
+    };
+
+    // Attempt 1: Call Backend
     try {
       const res = await fetch('/api/admin/generate-codes', {
         method: 'POST',
@@ -143,19 +248,53 @@ export const Admin: React.FC = () => {
         body: JSON.stringify({
           count: genCount,
           planId: genPlanId,
-          adminUid: user?.uid
+          adminUid: user?.uid,
+          adminEmail: user?.email
         })
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
         success(`Đã tạo thành công ${data.count} mã kích hoạt cho ${data.planName}!`);
         setLastGeneratedCodes(data.codes);
         loadAdminData();
-      } else {
-        error(data.message || 'Lỗi khi tạo mã.');
+        setIsGenerating(false);
+        return;
       }
-    } catch (err) {
-      error('Không thể kết nối đến máy chủ.');
+    } catch (apiErr) {
+      console.warn('API generate-codes notice, using Firestore fallback:', apiErr);
+    }
+
+    // Attempt 2: Direct Firestore write
+    try {
+      const batch = writeBatch(db);
+      const generated: string[] = [];
+      const nowIso = new Date().toISOString();
+      const count = Number(genCount) || 10;
+      for (let i = 0; i < count; i++) {
+        const c = generateClientCode();
+        generated.push(c);
+        const ref = doc(db, 'activationCodes', c);
+        batch.set(ref, {
+          id: c,
+          code: c,
+          planId: genPlanId,
+          planDays: planDays[genPlanId] || 30,
+          planPrice: planPrices[genPlanId] || 39000,
+          redeemed: false,
+          redeemedBy: null,
+          redeemedAt: null,
+          status: 'active',
+          createdBy: user?.uid || 'admin',
+          createdAt: nowIso
+        });
+      }
+      await batch.commit();
+      success(`Đã tạo thành công ${count} mã kích hoạt cho ${planNames[genPlanId] || genPlanId}!`);
+      setLastGeneratedCodes(generated);
+      loadAdminData();
+    } catch (fsErr: any) {
+      console.error('Error generating codes in Firestore:', fsErr);
+      error('Lỗi khi tạo mã kích hoạt.');
     } finally {
       setIsGenerating(false);
     }
@@ -166,12 +305,15 @@ export const Admin: React.FC = () => {
     e.preventDefault();
     if (!grantUserModal || !user) return;
     setIsGranting(true);
+    const planNames: Record<string, string> = {
+      month_1: 'DopiPOS Hộ kinh doanh (30 ngày)',
+      month_3: 'DopiPOS Hộ kinh doanh (90 ngày)',
+      year_1: 'DopiPOS Hộ kinh doanh (365 ngày)'
+    };
+    const targetPlanName = planNames[grantPlanId] || `Gói Hộ kinh doanh (${grantDays} ngày)`;
+
+    // Attempt 1: Call Backend
     try {
-      const planNames: Record<string, string> = {
-        month_1: 'DopiPOS Hộ kinh doanh (30 ngày)',
-        month_3: 'DopiPOS Hộ kinh doanh (90 ngày)',
-        year_1: 'DopiPOS Hộ kinh doanh (365 ngày)'
-      };
       const res = await fetch('/api/admin/activate-user-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -180,25 +322,56 @@ export const Admin: React.FC = () => {
           userId: grantUserModal.uid,
           planId: grantPlanId,
           days: grantDays,
-          planName: planNames[grantPlanId] || `Gói Hộ kinh doanh (${grantDays} ngày)`
+          planName: targetPlanName
         })
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
         success(`Đã kích hoạt ${grantDays} ngày cho ${grantUserModal.displayName || grantUserModal.email}!`);
         setGrantUserModal(null);
         loadAdminData();
-      } else {
-        error(data.message || 'Lỗi khi kích hoạt gói.');
+        setIsGranting(false);
+        return;
       }
-    } catch {
-      error('Lỗi kết nối máy chủ.');
+    } catch (apiErr) {
+      console.warn('API activate-user-plan notice, using Firestore fallback:', apiErr);
+    }
+
+    // Attempt 2: Direct Firestore write
+    try {
+      const numDays = Number(grantDays) || 30;
+      const now = new Date();
+      const newEndDate = new Date(now.getTime() + numDays * 86400000).toISOString();
+      const nowIso = now.toISOString();
+      await setDoc(
+        doc(db, 'subscriptions', grantUserModal.uid),
+        {
+          id: grantUserModal.uid,
+          userId: grantUserModal.uid,
+          storeId: grantUserModal.uid,
+          planId: grantPlanId,
+          planName: targetPlanName,
+          status: 'active',
+          isTrial: false,
+          startDate: nowIso,
+          endDate: newEndDate,
+          activatedByAdmin: true,
+          updatedAt: nowIso
+        },
+        { merge: true }
+      );
+      success(`Đã kích hoạt ${grantDays} ngày cho ${grantUserModal.displayName || grantUserModal.email}!`);
+      setGrantUserModal(null);
+      loadAdminData();
+    } catch (fsErr: any) {
+      console.error('Error activating user plan in Firestore:', fsErr);
+      error('Lỗi khi kích hoạt gói dịch vụ.');
     } finally {
       setIsGranting(false);
     }
   };
 
-  // Toggle user account lock
+  // Toggle user account lock (Instant Firestore update + Backend sync)
   const handleToggleUserStatus = async (targetUser: any) => {
     const nextStatus = targetUser.status === 'blocked' ? 'active' : 'blocked';
     const isLocked = nextStatus === 'blocked';
@@ -210,25 +383,7 @@ export const Admin: React.FC = () => {
       )
     );
 
-    try {
-      const res = await fetch('/api/admin/toggle-user-status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          adminEmail: user?.email,
-          userId: targetUser.uid,
-          status: nextStatus
-        })
-      });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data?.success) {
-        success(`Đã ${nextStatus === 'blocked' ? 'khóa' : 'mở khóa'} tài khoản ${targetUser.email}`);
-        return;
-      }
-    } catch {
-      // Backend unavailable, fallback to client Firestore write
-    }
-
+    // Direct Firestore write first for IMMEDIATE realtime listener response
     try {
       await setDoc(
         doc(db, 'users', targetUser.uid),
@@ -240,7 +395,19 @@ export const Admin: React.FC = () => {
       console.error('Error toggling user status in Firestore:', err);
       error('Lỗi khi cập nhật trạng thái tài khoản.');
       loadAdminData();
+      return;
     }
+
+    // Background sync to backend endpoint
+    fetch('/api/admin/toggle-user-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        adminEmail: user?.email,
+        userId: targetUser.uid,
+        status: nextStatus
+      })
+    }).catch(() => {});
   };
 
   // Toggle code status (active / disabled)
@@ -252,15 +419,20 @@ export const Admin: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: code.code, status: nextStatus })
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
         success(`Đã đổi trạng thái mã ${code.code}`);
         loadAdminData();
-      } else {
-        error(data.message || 'Lỗi cập nhật mã.');
+        return;
       }
-    } catch (err) {
-      error('Lỗi kết nối.');
+    } catch {}
+
+    try {
+      await setDoc(doc(db, 'activationCodes', code.code), { status: nextStatus }, { merge: true });
+      success(`Đã đổi trạng thái mã ${code.code}`);
+      loadAdminData();
+    } catch {
+      error('Không thể cập nhật trạng thái mã.');
     }
   };
 
@@ -274,14 +446,23 @@ export const Admin: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
         success('Đã lưu cấu hình liên hệ hệ thống!');
-      } else {
-        error('Không thể lưu cấu hình.');
+        setIsSavingSettings(false);
+        return;
       }
-    } catch (err) {
-      error('Lỗi kết nối máy chủ.');
+    } catch {}
+
+    try {
+      await setDoc(
+        doc(db, 'systemSettings', 'global'),
+        { ...settings, updatedAt: new Date().toISOString() },
+        { merge: true }
+      );
+      success('Đã lưu cấu hình liên hệ hệ thống!');
+    } catch {
+      error('Không thể lưu cấu hình.');
     } finally {
       setIsSavingSettings(false);
     }

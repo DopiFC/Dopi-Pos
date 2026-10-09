@@ -95,7 +95,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenActivateM
           <div className={`${isAccountLocked ? 'flex' : 'hidden sm:flex'} items-center`}>
             {isAccountLocked ? (
               <div
-                className="flex items-center gap-1.5 px-3 py-1 bg-rose-100 border border-rose-300 text-rose-700 rounded-full text-xs font-bold shadow-xs"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 bg-rose-100 border border-rose-300 text-rose-700 rounded-full text-[11px] sm:text-xs font-bold shadow-xs whitespace-nowrap shrink-0 animate-pulse"
                 title="Tài khoản này đã bị khóa bởi Quản trị viên"
               >
                 <Lock className="w-3.5 h-3.5 text-rose-600 shrink-0" />

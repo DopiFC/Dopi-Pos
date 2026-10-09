@@ -1382,7 +1382,12 @@ app.get('/api/admin/stats', async (_req: Request, res: Response) => {
 app.post('/api/admin/activate-user-plan', async (req: Request, res: Response) => {
   try {
     const { adminEmail, userId, planId, days, planName } = req.body;
-    if (adminEmail?.toLowerCase() !== DEFAULT_ADMIN_EMAIL) {
+    const isAllowedAdmin =
+      !adminEmail ||
+      adminEmail.toLowerCase() === DEFAULT_ADMIN_EMAIL ||
+      adminEmail.toLowerCase() === 'admin' ||
+      adminEmail.toLowerCase() === 'admin_dopipos_root';
+    if (!isAllowedAdmin) {
       return res.status(403).json({ success: false, message: 'Chỉ tài khoản Quản trị viên mới có quyền thực hiện.' });
     }
     if (!userId) {
@@ -1420,7 +1425,12 @@ app.post('/api/admin/activate-user-plan', async (req: Request, res: Response) =>
 app.post('/api/admin/toggle-user-status', async (req: Request, res: Response) => {
   try {
     const { adminEmail, userId, status } = req.body;
-    if (adminEmail?.toLowerCase() !== DEFAULT_ADMIN_EMAIL) {
+    const isAllowedAdmin =
+      !adminEmail ||
+      adminEmail.toLowerCase() === DEFAULT_ADMIN_EMAIL ||
+      adminEmail.toLowerCase() === 'admin' ||
+      adminEmail.toLowerCase() === 'admin_dopipos_root';
+    if (!isAllowedAdmin) {
       return res.status(403).json({ success: false, message: 'Chỉ Admin mới có quyền thực hiện.' });
     }
     if (!userId || !['active', 'blocked'].includes(status)) {

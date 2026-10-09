@@ -13,12 +13,13 @@ import {
   CreditCard,
   Settings,
   X,
-  ShieldAlert
+  ShieldAlert,
+  Lock
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export const BottomNavigation: React.FC = () => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isAccountLocked } = useAuth();
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   const mainTabs = [
@@ -39,6 +40,14 @@ export const BottomNavigation: React.FC = () => {
 
   return (
     <>
+      {/* Mobile Account Locked Status Bar */}
+      {isAccountLocked && (
+        <div className="lg:hidden fixed bottom-[58px] left-0 right-0 z-30 bg-rose-600 text-white text-[11px] font-bold py-1.5 px-3 text-center shadow-md flex items-center justify-center gap-1.5 animate-pulse">
+          <Lock className="w-3.5 h-3.5 shrink-0" />
+          <span>Tài khoản của bạn đã bị khoá</span>
+        </div>
+      )}
+
       {/* Mobile Bottom Navigation Bar */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-200 shadow-lg px-2 py-1 safe-area-bottom">
         <div className="grid grid-cols-5 items-center justify-around">
