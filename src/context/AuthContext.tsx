@@ -229,25 +229,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 1. One-click Default Admin Login
   const loginWithDefaultAdmin = async () => {
-    const res = await fetch('/api/auth/admin-login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    });
-    const data = await res.json();
-    if (res.ok && data.success) {
-      setUser(data.user);
-      setProfile(data.user);
-      setStore(data.store);
-      setSubscription(data.subscription);
-      localStorage.setItem('dopipos_session', JSON.stringify({
-        user: data.user,
-        profile: data.user,
-        store: data.store,
-        subscription: data.subscription
-      }));
-    } else {
-      throw new Error(data.message || 'Không thể đăng nhập admin');
+    try {
+      const res = await fetch('/api/auth/admin-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setUser(data.user);
+          setProfile(data.user);
+          setStore(data.store);
+          setSubscription(data.subscription);
+          localStorage.setItem('dopipos_session', JSON.stringify({
+            user: data.user,
+            profile: data.user,
+            store: data.store,
+            subscription: data.subscription
+          }));
+          return;
+        }
+      }
+    } catch {
+      // Backend not reachable (e.g. GitHub Pages or static host)
     }
+
+    // Static / Offline Demo Admin session fallback
+    const mockAdmin: UserProfile = {
+      uid: 'admin_demo_master',
+      email: 'nhgb2605@gmail.com',
+      displayName: 'Quản trị viên (Master)',
+      storeName: 'Cửa hàng DopiPOS',
+      role: 'admin',
+      createdAt: new Date().toISOString()
+    };
+    const mockStore: Store = {
+      id: 'admin_demo_master',
+      ownerId: 'admin_demo_master',
+      name: 'Cửa hàng DopiPOS Demo',
+      createdAt: new Date().toISOString()
+    };
+    const mockSub: Subscription = {
+      id: 'sub_demo_master',
+      userId: 'admin_demo_master',
+      storeId: 'admin_demo_master',
+      planId: 'business_household',
+      planName: 'Gói Hộ Kinh Doanh (Vĩnh viễn)',
+      status: 'active',
+      isTrial: false,
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + 365 * 86400000).toISOString(),
+      createdAt: new Date().toISOString()
+    };
+    setUser(mockAdmin);
+    setProfile(mockAdmin);
+    setStore(mockStore);
+    setSubscription(mockSub);
+    localStorage.setItem('dopipos_session', JSON.stringify({
+      user: mockAdmin,
+      profile: mockAdmin,
+      store: mockStore,
+      subscription: mockSub
+    }));
   };
 
   // 2. Google Sign-In

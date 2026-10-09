@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LogIn, Lock, Mail, AlertCircle } from 'lucide-react';
+import { LogIn, Lock, Mail, AlertCircle, Zap } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 
 export const Login: React.FC = () => {
-  const { login, signInWithGoogle } = useAuth();
+  const { login, signInWithGoogle, loginWithDefaultAdmin } = useAuth();
   const { success, error } = useToast();
   const navigate = useNavigate();
 
@@ -13,7 +13,23 @@ export const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [quickLoading, setQuickLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleQuickLogin = async () => {
+    setQuickLoading(true);
+    setErrorMessage(null);
+    try {
+      await loginWithDefaultAdmin();
+      success('Đăng nhập nhanh thành công!');
+      navigate('/dashboard');
+    } catch (err: any) {
+      console.error(err);
+      error(err.message || 'Không thể đăng nhập nhanh.');
+    } finally {
+      setQuickLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,6 +82,17 @@ export const Login: React.FC = () => {
         </div>
 
         <div className="p-7 space-y-4">
+          {/* Quick Demo Login button */}
+          <button
+            type="button"
+            disabled={quickLoading || loading}
+            onClick={handleQuickLogin}
+            className="w-full py-2.5 bg-linear-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Zap className="w-4 h-4 text-amber-200 fill-amber-200" />
+            <span>{quickLoading ? 'Đang mở phiên làm việc...' : 'Đăng nhập nhanh (Dùng thử ngay)'}</span>
+          </button>
+
           {/* Google Sign-in */}
           <button
             type="button"

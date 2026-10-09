@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DopiPOS - Đang chuyển hướng...</title>
+    <script>
+      // Single Page App redirect for GitHub Pages
+      // Converts direct path into hash route
+      var path = window.location.pathname;
+      var repo = path.split('/')[1] || '';
+      var query = window.location.search;
+      var hash = window.location.hash;
+      
+      // If deployed in a subpath like /reponame/somepage, redirect to /reponame/#/somepage
+      var segments = path.split('/').filter(Boolean);
+      if (segments.length > 1) {
+        var repoName = segments[0];
+        var routePath = '/' + segments.slice(1).join('/');
+        window.location.replace('/' + repoName + '/#' + routePath + query + hash);
+      } else {
+        window.location.replace('./');
+      }
+    </script>
+  </head>
+  <body>
+    <div style="font-family: system-ui, sans-serif; text-align: center; padding: 40px; color: #475569;">
+      <p>Đang chuyển hướng về DopiPOS...</p>
+    </div>
+  </body>
+</html>
