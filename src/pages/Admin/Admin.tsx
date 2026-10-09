@@ -22,6 +22,8 @@ import { useToast } from '../../context/ToastContext';
 import { ActivationCode, SystemSettings } from '../../types';
 import { formatCurrency, formatDateTime } from '../../utils/format';
 import { Modal } from '../../components/common/Modal';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 
 export const Admin: React.FC = () => {
   const { user, isAdmin } = useAuth();
@@ -199,6 +201,15 @@ export const Admin: React.FC = () => {
   // Toggle user account lock
   const handleToggleUserStatus = async (targetUser: any) => {
     const nextStatus = targetUser.status === 'blocked' ? 'active' : 'blocked';
+    const isLocked = nextStatus === 'blocked';
+
+    // Optimistic UI update
+    setUsersList((prev) =>
+      prev.map((u) =>
+        u.uid === targetUser.uid ? { ...u, status: nextStatus, isLocked } : u
+      )
+    );
+
     try {
       const res = await fetch('/api/admin/toggle-user-status', {
         method: 'POST',
@@ -209,15 +220,26 @@ export const Admin: React.FC = () => {
           status: nextStatus
         })
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
         success(`Đã ${nextStatus === 'blocked' ? 'khóa' : 'mở khóa'} tài khoản ${targetUser.email}`);
-        loadAdminData();
-      } else {
-        error(data.message || 'Lỗi cập nhật.');
+        return;
       }
     } catch {
-      error('Lỗi kết nối.');
+      // Backend unavailable, fallback to client Firestore write
+    }
+
+    try {
+      await setDoc(
+        doc(db, 'users', targetUser.uid),
+        { status: nextStatus, isLocked, updatedAt: new Date().toISOString() },
+        { merge: true }
+      );
+      success(`Đã ${nextStatus === 'blocked' ? 'khóa' : 'mở khóa'} tài khoản ${targetUser.email}`);
+    } catch (err: any) {
+      console.error('Error toggling user status in Firestore:', err);
+      error('Lỗi khi cập nhật trạng thái tài khoản.');
+      loadAdminData();
     }
   };
 

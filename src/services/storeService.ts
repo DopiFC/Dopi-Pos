@@ -65,7 +65,7 @@ export async function saveProduct(product: Product): Promise<void> {
   }
 
   // Sanitize to prevent undefined fields
-  const cleanProduct = {
+  const cleanProduct: Product = {
     ...product,
     name: product.name.trim(),
     sku: (product.sku || '').trim(),
@@ -79,42 +79,47 @@ export async function saveProduct(product: Product): Promise<void> {
     status: product.status || 'active',
     imageUrl: product.imageUrl ? product.imageUrl.trim() : '',
     toppings: Array.isArray(product.toppings) ? product.toppings : [],
+    costingMethod: product.costingMethod || 'direct',
+    recipeItems: Array.isArray(product.recipeItems) ? product.recipeItems : [],
     updatedAt: new Date().toISOString()
   };
 
   try {
-    // Call server API route first which executes with full server database access
+    // Call server API route first if available
     const res = await fetch('/api/products', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cleanProduct)
     });
-    const data = await res.json();
-    if (res.ok && data.success) {
-      return;
-    }
-    throw new Error(data.message || 'Không thể lưu sản phẩm.');
-  } catch (apiErr: any) {
-    // If backend unavailable, try direct client Firestore write
-    try {
-      const ref = doc(db, 'products', cleanProduct.id);
-      await setDoc(ref, cleanProduct, { merge: true });
-    } catch (fsErr: any) {
-      console.error('Firestore saveProduct error:', fsErr);
-      if (fsErr.code === 'permission-denied') {
-        throw new Error('Bạn không có quyền tạo hoặc chỉnh sửa sản phẩm này.');
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data?.success) {
+        return;
       }
-      throw new Error(apiErr.message || 'Lỗi khi lưu sản phẩm vào cơ sở dữ liệu.');
     }
+  } catch (apiErr: any) {
+    // If backend unavailable, continue to client Firestore write
+  }
+
+  // Direct client Firestore write
+  try {
+    const ref = doc(db, 'products', cleanProduct.id);
+    await setDoc(ref, cleanProduct, { merge: true });
+  } catch (fsErr: any) {
+    console.error('Firestore saveProduct error:', fsErr);
+    if (fsErr.code === 'permission-denied') {
+      throw new Error('Bạn không có quyền tạo hoặc chỉnh sửa sản phẩm này.');
+    }
+    throw new Error('Không thể lưu sản phẩm vào cơ sở dữ liệu.');
   }
 }
 
 export async function deleteProduct(productId: string): Promise<void> {
   try {
     const res = await fetch(`/api/products/${productId}`, { method: 'DELETE' });
-    const data = await res.json();
-    if (res.ok && data.success) {
-      return;
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data?.success) return;
     }
   } catch (e) {
     // Fallback to client Firestore delete
@@ -126,7 +131,7 @@ export async function deleteProduct(productId: string): Promise<void> {
     if (error.code === 'permission-denied') {
       throw new Error('Bạn không có quyền xóa sản phẩm này.');
     }
-    handleFirestoreError(error, OperationType.DELETE, `products/${productId}`);
+    console.warn('Fallback delete failed:', error);
   }
 }
 
@@ -218,14 +223,16 @@ export async function createOrderWithInventory(
         userId: order.createdBy
       })
     });
-    const data = await res.json();
-    if (res.ok && data.success) {
-      return { order: data.order, invoice: data.invoice };
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data?.success && data?.order && data?.invoice) {
+        return { order: data.order, invoice: data.invoice };
+      }
     }
-    throw new Error(data.message || 'Lỗi khi xử lý đơn hàng.');
   } catch (apiErr: any) {
     // If backend unavailable, perform client Firestore fallback
     console.warn('Fallback to client order write:', apiErr);
+  }
     const batch = writeBatch(db);
     const nowIso = new Date().toISOString();
     const invoiceId = `INV-${order.orderNumber.replace('DP-', '')}`;
@@ -292,7 +299,6 @@ export async function createOrderWithInventory(
     await batch.commit();
     return { order: finalOrder, invoice };
   }
-}
 
 export async function cancelOrder(order: Order, userId: string): Promise<void> {
   try {

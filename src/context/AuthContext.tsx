@@ -23,6 +23,7 @@ import {
 import { auth, db } from '../lib/firebase';
 import { UserProfile, Store, Subscription } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firebaseError';
+import { seedStoreDataClient } from '../services/seedService';
 
 interface AuthContextType {
   user: User | { uid: string; email: string; displayName?: string } | null;
@@ -30,6 +31,7 @@ interface AuthContextType {
   store: Store | null;
   subscription: Subscription | null;
   isAdmin: boolean;
+  isAccountLocked: boolean;
   isPlanActive: boolean;
   isTrialActive: boolean;
   isPlanExpired: boolean;
@@ -61,6 +63,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     user?.email?.toLowerCase() === 'nhgb2605@gmail.com'
   );
 
+  // Check user lock status
+  const isAccountLocked = Boolean(
+    !isAdmin && (
+      profile?.status === 'blocked' ||
+      profile?.status === 'locked' ||
+      profile?.isLocked === true ||
+      user?.status === 'blocked' ||
+      user?.isLocked === true
+    )
+  );
+
   // Compute plan and trial status
   const nowTime = Date.now();
   const subEndDate = subscription?.endDate ? new Date(subscription.endDate).getTime() : 0;
@@ -74,8 +87,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     subscription?.planId === 'business_household'
   ) && !isPlanExpired;
 
-  // Non-admin users cannot access advanced features once the 3-day trial expires
-  const canAccessAdvancedFeatures = isAdmin || isPlanActive;
+  // Non-admin users cannot access advanced features once the 3-day trial expires or if account is locked
+  const canAccessAdvancedFeatures = !isAccountLocked && (isAdmin || isPlanActive);
+
+  // Real-time listener for current user's profile to instantly detect account locking
+  useEffect(() => {
+    const currentUid = user?.uid;
+    if (!currentUid) return;
+    const unsub = onSnapshot(
+      doc(db, 'users', currentUid),
+      (snap) => {
+        if (snap.exists()) {
+          const uData = snap.data() as UserProfile;
+          setProfile((prev) => ({ ...(prev || {}), ...uData }));
+          const current = localStorage.getItem('dopipos_session');
+          if (current) {
+            try {
+              const parsed = JSON.parse(current);
+              parsed.user = { ...parsed.user, ...uData };
+              parsed.profile = { ...parsed.profile, ...uData };
+              localStorage.setItem('dopipos_session', JSON.stringify(parsed));
+            } catch {}
+          }
+        }
+      },
+      (err) => {
+        console.warn('Realtime profile listener error:', err);
+      }
+    );
+    return () => unsub();
+  }, [user?.uid]);
 
   const fetchUserData = async (currentUser: { uid: string; email: string | null; displayName?: string | null }) => {
     try {
@@ -372,6 +413,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             subscription: data.subscription
           })
         );
+        // Ensure initial sample data exists in client firestore
+        seedStoreDataClient(data.user.uid, data.user.uid).catch(() => {});
         return;
       }
 
@@ -466,6 +509,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         subscription: trialSub
       })
     );
+    // Seed sample menu and tables for instant working store
+    await seedStoreDataClient(uid, uid).catch(() => {});
   };
 
   // 4. Robust Login (Handles Backend + Client Firestore seamlessly)
@@ -594,6 +639,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         store,
         subscription,
         isAdmin,
+        isAccountLocked,
         isPlanActive,
         isTrialActive,
         isPlanExpired,

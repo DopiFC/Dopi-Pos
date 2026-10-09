@@ -20,9 +20,10 @@ import { Order, Product } from '../../types';
 import { formatCurrency, getRemainingDays, formatDateOnly } from '../../utils/format';
 import { ActivateCodeModal } from '../../components/common/ActivateCodeModal';
 import { ContactBuyCodeModal } from '../../components/common/ContactBuyCodeModal';
+import { seedStoreDataClient } from '../../services/seedService';
 
 export const Dashboard: React.FC = () => {
-  const { user, store, subscription } = useAuth();
+  const { user, store, subscription, isAccountLocked } = useAuth();
   const { success, error } = useToast();
 
   const [orders, setOrders] = useState<Order[]>([]);
@@ -66,15 +67,23 @@ export const Dashboard: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ storeId: store.id, userId: user.uid })
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
         success('Đã khởi tạo danh mục, sản phẩm mẫu và bàn F&B thành công!');
         await loadDashboardData();
-      } else {
-        error(data.message || 'Lỗi khởi tạo dữ liệu mẫu');
+        return;
       }
-    } catch (e) {
-      error('Không thể kết nối đến máy chủ.');
+    } catch {
+      // Backend not available, fallback to client direct firestore seeding
+    }
+
+    try {
+      await seedStoreDataClient(store.id, user.uid);
+      success('Đã khởi tạo danh mục, sản phẩm mẫu và bàn F&B thành công!');
+      await loadDashboardData();
+    } catch (err: any) {
+      console.error('Seeding error:', err);
+      error('Không thể tạo dữ liệu mẫu. Vui lòng thử lại sau.');
     } finally {
       setSeeding(false);
     }
@@ -164,6 +173,30 @@ export const Dashboard: React.FC = () => {
             className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shrink-0"
           >
             Gia hạn gói
+          </button>
+        </div>
+      )}
+
+      {/* Account Locked Alert */}
+      {isAccountLocked && (
+        <div className="p-4 bg-rose-50 border-2 border-rose-300 rounded-xl flex items-center justify-between gap-3 text-rose-800 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-rose-900">Tài khoản của bạn đã bị khoá</p>
+              <p className="text-xs text-rose-700 mt-0.5">
+                Quản trị viên đã tạm khoá tài khoản này. Các tính năng bán hàng và giao dịch tạm thời bị giới hạn. Vui lòng liên hệ Hotline / Zalo hỗ trợ để được mở khoá.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setContactOpen(true)}
+            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold shrink-0"
+          >
+            Liên hệ hỗ trợ
           </button>
         </div>
       )}

@@ -1,4 +1,5 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
@@ -286,6 +287,8 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
         displayName: userData.displayName,
         storeName: userData.storeName,
         role: userData.role || (normalizedEmail === DEFAULT_ADMIN_EMAIL ? 'admin' : 'user'),
+        status: userData.status || 'active',
+        isLocked: userData.status === 'blocked' || userData.isLocked === true,
         createdAt: userData.createdAt
       },
       store: storeSnap.exists() ? storeSnap.data() : { id: uid, ownerId: uid, name: userData.storeName || 'Cửa hàng' },
@@ -1425,7 +1428,7 @@ app.post('/api/admin/toggle-user-status', async (req: Request, res: Response) =>
     }
 
     const userRef = doc(db, 'users', userId);
-    await setDoc(userRef, { status, updatedAt: new Date().toISOString() }, { merge: true });
+    await setDoc(userRef, { status, isLocked: status === 'blocked', updatedAt: new Date().toISOString() }, { merge: true });
 
     return res.json({ success: true, status });
   } catch (error) {

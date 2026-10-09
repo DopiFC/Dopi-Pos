@@ -7,6 +7,8 @@ export interface UserProfile {
   phoneNumber?: string;
   storeName?: string;
   role: UserRole;
+  status?: 'active' | 'blocked' | 'locked';
+  isLocked?: boolean;
   createdAt: string;
   updatedAt?: string;
 }

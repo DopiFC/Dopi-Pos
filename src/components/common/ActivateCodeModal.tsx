@@ -3,6 +3,8 @@ import { Modal } from './Modal';
 import { KeyRound, CheckCircle, HelpCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 
 interface ActivateCodeModalProps {
   isOpen: boolean;
@@ -54,13 +56,13 @@ export const ActivateCodeModal: React.FC<ActivateCodeModalProps> = ({
           code: normalized,
           planId: selectedPlan,
           userId: user.uid,
-          storeId: store.id
+          storeId: store?.id || user.uid
         })
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
 
-      if (response.ok && data.success) {
+      if (response.ok && data?.success) {
         success(data.message || 'Kích hoạt thành công!');
         setResultMessage(data.message);
         await refreshSubscription();
@@ -69,11 +71,85 @@ export const ActivateCodeModal: React.FC<ActivateCodeModalProps> = ({
           onClose();
           if (onSuccess) onSuccess();
         }, 1200);
-      } else {
-        error(data.message || 'Kích hoạt thất bại.');
+        return;
       }
+
+      if (data && !data.success && data.message) {
+        error(data.message);
+        return;
+      }
+    } catch {
+      // Backend not available, fallback to client Firestore redemption
+    }
+
+    // Direct Firestore code redemption fallback
+    try {
+      const codeRef = doc(db, 'activationCodes', normalized);
+      const codeSnap = await getDoc(codeRef);
+
+      if (!codeSnap.exists()) {
+        error('Mã kích hoạt không tồn tại trên hệ thống.');
+        return;
+      }
+
+      const cData = codeSnap.data();
+      if (cData.status === 'disabled') {
+        error('Mã kích hoạt này hiện đang bị tạm khóa.');
+        return;
+      }
+      if (cData.redeemed) {
+        error('Mã kích hoạt này đã được sử dụng trước đó.');
+        return;
+      }
+
+      const planDays = cData.planId === 'month_3' ? 90 : 30;
+      const now = new Date();
+      const nowIso = now.toISOString();
+
+      // Read current subscription
+      const subRef = doc(db, 'subscriptions', user.uid);
+      const subSnap = await getDoc(subRef);
+      const currentSub = subSnap.exists() ? subSnap.data() : null;
+
+      const currentEnd = (currentSub?.endDate && new Date(currentSub.endDate) > now)
+        ? new Date(currentSub.endDate)
+        : now;
+      const newEndDate = new Date(currentEnd.getTime() + planDays * 86400000).toISOString();
+
+      await setDoc(codeRef, {
+        redeemed: true,
+        redeemedBy: user.uid,
+        redeemedAt: nowIso,
+        status: 'redeemed'
+      }, { merge: true });
+
+      const updatedSub = {
+        id: user.uid,
+        userId: user.uid,
+        storeId: store?.id || user.uid,
+        planId: cData.planId || selectedPlan,
+        planName: cData.planId === 'month_3' ? 'DopiPOS Hộ kinh doanh – 3 tháng' : 'DopiPOS Hộ kinh doanh – 1 tháng',
+        status: 'active',
+        isTrial: false,
+        startDate: currentSub?.startDate || nowIso,
+        endDate: newEndDate,
+        activatedViaCode: normalized,
+        updatedAt: nowIso
+      };
+
+      await setDoc(subRef, updatedSub, { merge: true });
+
+      success(`Kích hoạt mã thành công! Gói được gia hạn thêm ${planDays} ngày.`);
+      setResultMessage(`Kích hoạt thành công thêm ${planDays} ngày.`);
+      await refreshSubscription();
+      setTimeout(() => {
+        setCode('');
+        onClose();
+        if (onSuccess) onSuccess();
+      }, 1200);
     } catch (err: any) {
-      error('Không thể kết nối đến máy chủ kích hoạt. Vui lòng thử lại.');
+      console.error('Redeem error:', err);
+      error('Không thể kích hoạt mã lúc này. Vui lòng kiểm tra lại.');
     } finally {
       setLoading(false);
     }
